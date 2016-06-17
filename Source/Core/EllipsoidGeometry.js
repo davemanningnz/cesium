@@ -31,7 +31,7 @@ define([
         CesiumMath,
         PrimitiveType,
         VertexFormat) {
-    "use strict";
+    'use strict';
 
     var scratchPosition = new Cartesian3();
     var scratchNormal = new Cartesian3();
@@ -60,8 +60,6 @@ define([
      *
      * @see EllipsoidGeometry#createGeometry
      *
-     * @demo {@link http://cesiumjs.org/Cesium/Apps/Sandcastle/index.html?src=Ellipsoid.html|Cesium Sandcastle Ellipsoid Demo}
-     *
      * @example
      * var ellipsoid = new Cesium.EllipsoidGeometry({
      *   vertexFormat : Cesium.VertexFormat.POSITION_ONLY,
@@ -69,7 +67,7 @@ define([
      * });
      * var geometry = Cesium.EllipsoidGeometry.createGeometry(ellipsoid);
      */
-    var EllipsoidGeometry = function(options) {
+    function EllipsoidGeometry(options) {
         options = defaultValue(options, defaultValue.EMPTY_OBJECT);
 
         var radii = defaultValue(options.radii, defaultRadii);
@@ -91,7 +89,7 @@ define([
         this._slicePartitions = slicePartitions;
         this._vertexFormat = VertexFormat.clone(vertexFormat);
         this._workerName = 'createEllipsoidGeometry';
-    };
+    }
 
     /**
      * The number of elements used to pack the object into an array.
@@ -101,9 +99,8 @@ define([
 
     /**
      * Stores the provided instance into the provided array.
-     * @function
      *
-     * @param {Object} value The value to pack.
+     * @param {EllipsoidGeometry} value The value to pack.
      * @param {Number[]} array The array to pack into.
      * @param {Number} [startingIndex=0] The index into the array at which to start packing the elements.
      */
@@ -182,10 +179,15 @@ define([
      * Computes the geometric representation of an ellipsoid, including its vertices, indices, and a bounding sphere.
      *
      * @param {EllipsoidGeometry} ellipsoidGeometry A description of the ellipsoid.
-     * @returns {Geometry} The computed vertices and indices.
+     * @returns {Geometry|undefined} The computed vertices and indices.
      */
     EllipsoidGeometry.createGeometry = function(ellipsoidGeometry) {
         var radii = ellipsoidGeometry._radii;
+
+        if ((radii.x <= 0) || (radii.y <= 0) || (radii.z <= 0)) {
+            return;
+        }
+
         var ellipsoid = Ellipsoid.fromCartesian3(radii);
         var vertexFormat = ellipsoidGeometry._vertexFormat;
 
@@ -198,7 +200,7 @@ define([
         var vertexCount = stackPartitions * slicePartitions;
         var positions = new Float64Array(vertexCount * 3);
 
-        var numIndices = 6 * (slicePartitions - 1) * (stackPartitions - 1);
+        var numIndices = 6 * (slicePartitions - 1) * (stackPartitions - 2);
         var indices = IndexDatatype.createTypedArray(vertexCount, numIndices);
 
         var normals = (vertexFormat.normal) ? new Float32Array(vertexCount * 3) : undefined;
@@ -242,7 +244,7 @@ define([
 
         for (i = 0; i < slicePartitions; i++) {
             // duplicate first point for correct
-            // texture coordinates at the north pole.
+            // texture coordinates at the south pole.
             positions[index++] = 0.0;
             positions[index++] = 0.0;
             positions[index++] = -radii.z;
@@ -354,9 +356,17 @@ define([
         }
 
         index = 0;
-        for (i = 0; i < stackPartitions; i++) {
-            var topOffset = i * slicePartitions;
-            var bottomOffset = (i + 1) * slicePartitions;
+        for (j = 0; j < slicePartitions - 1; j++) {
+            indices[index++] = slicePartitions + j;
+            indices[index++] = slicePartitions + j + 1;
+            indices[index++] = j + 1;
+        }
+
+        var topOffset;
+        var bottomOffset;
+        for (i = 1; i < stackPartitions - 2; i++) {
+            topOffset = i * slicePartitions;
+            bottomOffset = (i + 1) * slicePartitions;
 
             for (j = 0; j < slicePartitions - 1; j++) {
                 indices[index++] = bottomOffset + j;
@@ -367,6 +377,16 @@ define([
                 indices[index++] = topOffset + j + 1;
                 indices[index++] = topOffset + j;
             }
+        }
+
+        i = stackPartitions - 2;
+        topOffset = i * slicePartitions;
+        bottomOffset = (i + 1) * slicePartitions;
+
+        for (j = 0; j < slicePartitions - 1; j++) {
+            indices[index++] = bottomOffset + j;
+            indices[index++] = topOffset + j + 1;
+            indices[index++] = topOffset + j;
         }
 
         return new Geometry({

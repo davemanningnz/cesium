@@ -1,5 +1,6 @@
 /*global define*/
 define([
+        './arrayRemoveDuplicates',
         './BoundingRectangle',
         './BoundingSphere',
         './Cartesian2',
@@ -20,6 +21,7 @@ define([
         './PrimitiveType',
         './WindingOrder'
     ], function(
+        arrayRemoveDuplicates,
         BoundingRectangle,
         BoundingSphere,
         Cartesian2,
@@ -39,7 +41,7 @@ define([
         PolylineVolumeGeometryLibrary,
         PrimitiveType,
         WindingOrder) {
-    "use strict";
+    'use strict';
 
     function computeAttributes(positions, shape) {
         var attributes = new GeometryAttributes();
@@ -108,8 +110,6 @@ define([
      *
      * @see PolylineVolumeOutlineGeometry#createGeometry
      *
-     * @demo {@link http://cesiumjs.org/Cesium/Apps/Sandcastle/index.html?src=Polyline%20Volume%20Outline.html|Cesium Sandcastle Polyline Volume Outline Demo}
-     *
      * @example
      * function computeCircle(radius) {
      *   var positions = [];
@@ -128,7 +128,7 @@ define([
      *   shapePositions : computeCircle(100000.0)
      * });
      */
-    var PolylineVolumeOutlineGeometry = function(options) {
+    function PolylineVolumeOutlineGeometry(options) {
         options = defaultValue(options, defaultValue.EMPTY_OBJECT);
         var positions = options.polylinePositions;
         var shape = options.shapePositions;
@@ -157,13 +157,12 @@ define([
          * @type {Number}
          */
         this.packedLength = numComponents + Ellipsoid.packedLength + 2;
-    };
+    }
 
     /**
      * Stores the provided instance into the provided array.
-     * @function
      *
-     * @param {Object} value The value to pack.
+     * @param {PolylineVolumeOutlineGeometry} value The value to pack.
      * @param {Number[]} array The array to pack into.
      * @param {Number} [startingIndex=0] The index into the array at which to start packing the elements.
      */
@@ -280,7 +279,7 @@ define([
      */
     PolylineVolumeOutlineGeometry.createGeometry = function(polylineVolumeOutlineGeometry) {
         var positions = polylineVolumeOutlineGeometry._positions;
-        var cleanPositions = PolylineVolumeGeometryLibrary.removeDuplicatesFromPositions(positions, polylineVolumeOutlineGeometry._ellipsoid);
+        var cleanPositions = arrayRemoveDuplicates(positions, Cartesian3.equalsEpsilon);
         var shape2D = polylineVolumeOutlineGeometry._shape;
         shape2D = PolylineVolumeGeometryLibrary.removeDuplicatesFromShape(shape2D);
 

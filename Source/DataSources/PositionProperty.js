@@ -15,7 +15,7 @@ define([
         Matrix3,
         ReferenceFrame,
         Transforms) {
-    "use strict";
+    'use strict';
 
     /**
      * The interface for all {@link Property} objects that define a world
@@ -30,9 +30,9 @@ define([
      * @see SampledPositionProperty
      * @see TimeIntervalCollectionPositionProperty
      */
-    var PositionProperty = function() {
+    function PositionProperty() {
         DeveloperError.throwInstantiationError();
-    };
+    }
 
     defineProperties(PositionProperty.prototype, {
         /**

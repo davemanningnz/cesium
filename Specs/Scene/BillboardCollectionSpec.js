@@ -5,12 +5,17 @@ defineSuite([
         'Core/BoundingSphere',
         'Core/Cartesian2',
         'Core/Cartesian3',
+        'Core/CesiumTerrainProvider',
         'Core/Color',
         'Core/defined',
+        'Core/defineProperties',
         'Core/Ellipsoid',
+        'Core/Event',
         'Core/loadImage',
         'Core/Math',
         'Core/NearFarScalar',
+        'Core/Rectangle',
+        'Renderer/ContextLimits',
         'Scene/HeightReference',
         'Scene/HorizontalOrigin',
         'Scene/OrthographicFrustum',
@@ -25,12 +30,17 @@ defineSuite([
         BoundingSphere,
         Cartesian2,
         Cartesian3,
+        CesiumTerrainProvider,
         Color,
         defined,
+        defineProperties,
         Ellipsoid,
+        Event,
         loadImage,
         CesiumMath,
         NearFarScalar,
+        Rectangle,
+        ContextLimits,
         HeightReference,
         HorizontalOrigin,
         OrthographicFrustum,
@@ -39,14 +49,12 @@ defineSuite([
         createScene,
         pollToPromise,
         when) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn*/
+    'use strict';
 
     var scene;
+    var context;
     var camera;
     var billboards;
-    var heightReferenceSupported;
-    var billboardsWithHeight;
 
     var greenImage;
     var blueImage;
@@ -55,9 +63,8 @@ defineSuite([
 
     beforeAll(function() {
         scene = createScene();
+        context = scene.context;
         camera = scene.camera;
-
-        heightReferenceSupported = defined(scene._globeDepth) && scene._globeDepth.supported && scene.context.maximumVertexTextureImageUnits > 0;
 
         return when.join(
             loadImage('./Data/Images/Green.png').then(function(result) {
@@ -87,13 +94,6 @@ defineSuite([
 
         billboards = new BillboardCollection();
         scene.primitives.add(billboards);
-
-        if (heightReferenceSupported) {
-            billboardsWithHeight = new BillboardCollection({
-                scene : scene
-            });
-            scene.primitives.add(billboardsWithHeight);
-        }
     });
 
     afterEach(function() {
@@ -124,6 +124,7 @@ defineSuite([
         expect(b.height).not.toBeDefined();
         expect(b.id).not.toBeDefined();
         expect(b.heightReference).toEqual(HeightReference.NONE);
+        expect(b.sizeInMeters).toEqual(false);
     });
 
     it('can add and remove before first update.', function() {
@@ -155,6 +156,7 @@ defineSuite([
             pixelOffsetScaleByDistance : new NearFarScalar(1.0, 1.0, 1.0e6, 0.0),
             width : 300.0,
             height : 200.0,
+            sizeInMeters : true,
             id : 'id'
         });
 
@@ -177,6 +179,7 @@ defineSuite([
         expect(b.pixelOffsetScaleByDistance).toEqual(new NearFarScalar(1.0, 1.0, 1.0e6, 0.0));
         expect(b.width).toEqual(300.0);
         expect(b.height).toEqual(200.0);
+        expect(b.sizeInMeters).toEqual(true);
         expect(b.id).toEqual('id');
     });
 
@@ -198,6 +201,7 @@ defineSuite([
         b.scaleByDistance = new NearFarScalar(1.0e6, 3.0, 1.0e8, 0.0);
         b.translucencyByDistance = new NearFarScalar(1.0e6, 1.0, 1.0e8, 0.0);
         b.pixelOffsetScaleByDistance = new NearFarScalar(1.0e6, 3.0, 1.0e8, 0.0);
+        b.sizeInMeters = true;
 
         expect(b.show).toEqual(false);
         expect(b.position).toEqual(new Cartesian3(1.0, 2.0, 3.0));
@@ -218,10 +222,27 @@ defineSuite([
         expect(b.pixelOffsetScaleByDistance).toEqual(new NearFarScalar(1.0e6, 3.0, 1.0e8, 0.0));
         expect(b.width).toEqual(300.0);
         expect(b.height).toEqual(200.0);
+        expect(b.sizeInMeters).toEqual(true);
     });
 
     it('is not destroyed', function() {
         expect(billboards.isDestroyed()).toEqual(false);
+    });
+
+    it('renders billboard with sizeInMeters', function() {
+        billboards.add({
+            position : Cartesian3.ZERO,
+            image : greenImage,
+            width : 2.0,
+            height : 2.0,
+            sizeInMeters : true
+        });
+
+        camera.position = new Cartesian3(2.0, 0.0, 0.0);
+        expect(scene.renderForSpecs()).toEqual([0, 255, 0, 255]);
+
+        camera.position = new Cartesian3(1e6, 0.0, 0.0);
+        expect(scene.renderForSpecs()).toEqual([0, 0, 0, 255]);
     });
 
     it('disables billboard scaleByDistance', function() {
@@ -783,6 +804,34 @@ defineSuite([
         expect(scene.renderForSpecs()).not.toEqual([0, 0, 0, 255]);
     });
 
+    it('renders billboards when instancing is disabled', function() {
+        // disable extension
+        var instancedArrays = context._instancedArrays;
+        context._instancedArrays = undefined;
+
+        expect(scene.renderForSpecs()).toEqual([0, 0, 0, 255]);
+
+        var b1 = billboards.add({
+            position : Cartesian3.ZERO,
+            image : greenImage
+        });
+        expect(scene.renderForSpecs()).toEqual([0, 255, 0, 255]);
+
+        var b2 = billboards.add({
+            position : new Cartesian3(1.0, 0.0, 0.0), // Closer to camera
+            image : blueImage
+        });
+        expect(scene.renderForSpecs()).toEqual([0, 0, 255, 255]);
+
+        billboards.remove(b2);
+        expect(scene.renderForSpecs()).toEqual([0, 255, 0, 255]);
+
+        billboards.remove(b1);
+        expect(scene.renderForSpecs()).toEqual([0, 0, 0, 255]);
+
+        context._instancedArrays = instancedArrays;
+    });
+
     it('updates 10% of billboards', function() {
         for ( var i = 0; i < 10; ++i) {
             billboards.add({
@@ -971,10 +1020,10 @@ defineSuite([
     it('computes screen space position with pixelOffset', function() {
         var b = billboards.add({
             position : Cartesian3.ZERO,
-            pixelOffset : new Cartesian2(1.0, 2.0)
+            pixelOffset : new Cartesian2(0.5, 0.5)
         });
         scene.renderForSpecs();
-        expect(b.computeScreenSpacePosition(scene)).toEqualEpsilon(new Cartesian2(1.5, 2.5), CesiumMath.EPSILON1);
+        expect(b.computeScreenSpacePosition(scene)).toEqualEpsilon(new Cartesian2(1, 1.0), CesiumMath.EPSILON1);
     });
 
     it('computes screen space position with eyeOffset', function() {
@@ -1091,7 +1140,7 @@ defineSuite([
         });
 
         scene.renderForSpecs();
-        var actual = scene._commandList[0].boundingVolume;
+        var actual = scene.frameState.commandList[0].boundingVolume;
 
         var positions = [one.position, two.position];
         var expected = BoundingSphere.fromPoints(positions);
@@ -1115,7 +1164,7 @@ defineSuite([
         // Update scene state
         scene.morphToColumbusView(0);
         scene.renderForSpecs();
-        var actual = scene._commandList[0].boundingVolume;
+        var actual = scene.frameState.commandList[0].boundingVolume;
 
         var projectedPositions = [
             projection.project(ellipsoid.cartesianToCartographic(one.position)),
@@ -1149,6 +1198,10 @@ defineSuite([
         orthoFrustum.near = 0.01 * maxRadii;
         orthoFrustum.far = 60.0 * maxRadii;
 
+        camera.setView({
+            destination : Rectangle.fromDegrees(-60.0, -60.0, -40.0, 60.0)
+        });
+
         // Update scene state
         scene.morphTo2D(0);
         scene.renderForSpecs();
@@ -1156,7 +1209,7 @@ defineSuite([
         camera.frustum = orthoFrustum;
 
         scene.renderForSpecs();
-        var actual = scene._commandList[0].boundingVolume;
+        var actual = scene.frameState.commandList[0].boundingVolume;
 
         var projectedPositions = [
             projection.project(ellipsoid.cartesianToCartographic(one.position)),
@@ -1181,7 +1234,7 @@ defineSuite([
         });
 
         scene.renderForSpecs();
-        var actual = scene._commandList[0].boundingVolume;
+        var actual = scene.frameState.commandList[0].boundingVolume;
 
         var positions = [one.position, two.position];
         var bs = BoundingSphere.fromPoints(positions);
@@ -1191,7 +1244,7 @@ defineSuite([
         var vectorProjection = Cartesian3.multiplyByScalar(camera.direction, Cartesian3.dot(diff, camera.direction), new Cartesian3());
         var distance = Math.max(0.0, Cartesian3.magnitude(vectorProjection) - bs.radius);
 
-        var pixelSize = camera.frustum.getPixelSize(dimensions, distance);
+        var pixelSize = camera.frustum.getPixelDimensions(dimensions.x, dimensions.y, distance, new Cartesian2());
         bs.radius += pixelSize.y * 0.25 * Math.max(greenImage.width, greenImage.height) + pixelSize.y * one.pixelOffset.y;
 
         expect(actual.center).toEqual(bs.center);
@@ -1204,7 +1257,7 @@ defineSuite([
             position : Cartesian3.fromDegrees(-50.0, -50.0)
         });
         scene.renderForSpecs();
-        var centeredRadius = scene._commandList[0].boundingVolume.radius;
+        var centeredRadius = scene.frameState.commandList[0].boundingVolume.radius;
         billboards.removeAll();
 
         billboards.add({
@@ -1213,7 +1266,7 @@ defineSuite([
             verticalOrigin: VerticalOrigin.TOP
         });
         scene.renderForSpecs();
-        var verticalRadius = scene._commandList[0].boundingVolume.radius;
+        var verticalRadius = scene.frameState.commandList[0].boundingVolume.radius;
         billboards.removeAll();
 
         billboards.add({
@@ -1222,7 +1275,7 @@ defineSuite([
             horizontalOrigin: HorizontalOrigin.LEFT
         });
         scene.renderForSpecs();
-        var horizontalRadius = scene._commandList[0].boundingVolume.radius;
+        var horizontalRadius = scene.frameState.commandList[0].boundingVolume.radius;
 
         expect(verticalRadius).toEqual(2*centeredRadius);
         expect(horizontalRadius).toEqual(2*centeredRadius);
@@ -1523,6 +1576,21 @@ defineSuite([
                 destroy : function() {}
             };
 
+            globe.beginFrame = function() {
+            };
+
+            globe.endFrame = function() {
+            };
+
+            globe.terrainProviderChanged = new Event();
+            defineProperties(globe, {
+                terrainProvider : {
+                    set : function(value) {
+                        this.terrainProviderChanged.raiseEvent(value);
+                    }
+                }
+            });
+
             globe._surface.updateHeight = function(position, callback) {
                 globe.callback = callback;
                 return function() {
@@ -1534,12 +1602,16 @@ defineSuite([
             return globe;
         }
 
-        it('explicitly constructs a billboard with height reference', function() {
-            if (!heightReferenceSupported) {
-                return;
-            }
-
+        var billboardsWithHeight;
+        beforeEach(function() {
             scene.globe = createMockGlobe();
+            billboardsWithHeight = new BillboardCollection({
+                scene : scene
+            });
+            scene.primitives.add(billboardsWithHeight);
+        });
+
+        it('explicitly constructs a billboard with height reference', function() {
             var b = billboardsWithHeight.add({
                 heightReference : HeightReference.CLAMP_TO_GROUND
             });
@@ -1548,11 +1620,6 @@ defineSuite([
         });
 
         it('set billboard height reference property', function() {
-            if (!heightReferenceSupported) {
-                return;
-            }
-
-            scene.globe = createMockGlobe();
             var b = billboardsWithHeight.add();
             b.heightReference = HeightReference.CLAMP_TO_GROUND;
 
@@ -1560,12 +1627,7 @@ defineSuite([
         });
 
         it('creating with a height reference creates a height update callback', function() {
-            if (!heightReferenceSupported) {
-                return;
-            }
-
-            scene.globe = createMockGlobe();
-            var b = billboardsWithHeight.add({
+            billboardsWithHeight.add({
                 heightReference : HeightReference.CLAMP_TO_GROUND,
                 position : Cartesian3.fromDegrees(-72.0, 40.0)
             });
@@ -1573,11 +1635,6 @@ defineSuite([
         });
 
         it('set height reference property creates a height update callback', function() {
-            if (!heightReferenceSupported) {
-                return;
-            }
-
-            scene.globe = createMockGlobe();
             var b = billboardsWithHeight.add({
                 position : Cartesian3.fromDegrees(-72.0, 40.0)
             });
@@ -1586,11 +1643,6 @@ defineSuite([
         });
 
         it('updates the callback when the height reference changes', function() {
-            if (!heightReferenceSupported) {
-                return;
-            }
-
-            scene.globe = createMockGlobe();
             var b = billboardsWithHeight.add({
                 heightReference : HeightReference.CLAMP_TO_GROUND,
                 position : Cartesian3.fromDegrees(-72.0, 40.0)
@@ -1608,11 +1660,6 @@ defineSuite([
         });
 
         it('changing the position updates the callback', function() {
-            if (!heightReferenceSupported) {
-                return;
-            }
-
-            scene.globe = createMockGlobe();
             var b = billboardsWithHeight.add({
                 heightReference : HeightReference.CLAMP_TO_GROUND,
                 position : Cartesian3.fromDegrees(-72.0, 40.0)
@@ -1625,11 +1672,6 @@ defineSuite([
         });
 
         it('callback updates the position', function() {
-            if (!heightReferenceSupported) {
-                return;
-            }
-
-            scene.globe = createMockGlobe();
             var b = billboardsWithHeight.add({
                 heightReference : HeightReference.CLAMP_TO_GROUND,
                 position : Cartesian3.fromDegrees(-72.0, 40.0)
@@ -1642,6 +1684,44 @@ defineSuite([
             scene.globe.callback(Cartesian3.fromDegrees(-72.0, 40.0, 100.0));
             cartographic = scene.globe.ellipsoid.cartesianToCartographic(b._clampedPosition);
             expect(cartographic.height).toEqualEpsilon(100.0, CesiumMath.EPSILON9);
+        });
+
+        it('changing the terrain provider', function() {
+            var b = billboardsWithHeight.add({
+                heightReference : HeightReference.CLAMP_TO_GROUND,
+                position : Cartesian3.fromDegrees(-72.0, 40.0)
+            });
+            expect(scene.globe.callback).toBeDefined();
+
+            spyOn(b, '_updateClamping').and.callThrough();
+
+            var terrainProvider = new CesiumTerrainProvider({
+                url : 'made/up/url',
+                requestVertexNormals : true
+            });
+
+            scene.terrainProvider = terrainProvider;
+
+            expect(b._updateClamping).toHaveBeenCalled();
+        });
+
+        it('height reference without a scene rejects', function() {
+            expect(function() {
+                return billboards.add({
+                    heightReference : HeightReference.CLAMP_TO_GROUND,
+                    position : Cartesian3.fromDegrees(-72.0, 40.0)
+                });
+            }).toThrowDeveloperError();
+        });
+
+        it('changing height reference without a scene throws DeveloperError', function() {
+            var b = billboards.add({
+                position : Cartesian3.fromDegrees(-72.0, 40.0)
+            });
+            
+            expect(function() {
+                b.heightReference = HeightReference.CLAMP_TO_GROUND;
+            }).toThrowDeveloperError();
         });
     });
 }, 'WebGL');

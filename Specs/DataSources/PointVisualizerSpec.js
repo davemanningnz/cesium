@@ -23,8 +23,7 @@ defineSuite([
         EntityCollection,
         PointGraphics,
         createScene) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn*/
+    'use strict';
 
     var scene;
     var visualizer;
@@ -203,6 +202,7 @@ defineSuite([
         //internal cache used by the visualizer, instead it just hides it.
         entityCollection.removeAll();
         expect(bb.show).toEqual(false);
+        expect(bb.id).toBeUndefined();
     });
 
     it('Visualizer sets entity property.', function() {

@@ -11,7 +11,7 @@ define([
         defineProperties,
         DeveloperError,
         Material) {
-    "use strict";
+    'use strict';
 
     /**
      * The interface for all {@link Property} objects that represent {@link Material} uniforms.
@@ -28,9 +28,9 @@ define([
      * @see PolylineOutlineMaterialProperty
      * @see StripeMaterialProperty
      */
-    var MaterialProperty = function() {
+    function MaterialProperty() {
         DeveloperError.throwInstantiationError();
-    };
+    }
 
     defineProperties(MaterialProperty.prototype, {
         /**

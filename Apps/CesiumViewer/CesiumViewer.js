@@ -5,12 +5,12 @@ define([
         'Cesium/Core/formatError',
         'Cesium/Core/getFilenameFromUri',
         'Cesium/Core/Math',
-        'Cesium/Core/queryToObject',
         'Cesium/Core/objectToQuery',
+        'Cesium/Core/queryToObject',
         'Cesium/DataSources/CzmlDataSource',
         'Cesium/DataSources/GeoJsonDataSource',
         'Cesium/DataSources/KmlDataSource',
-        'Cesium/Scene/TileMapServiceImageryProvider',
+        'Cesium/Scene/createTileMapServiceImageryProvider',
         'Cesium/Widgets/Viewer/Viewer',
         'Cesium/Widgets/Viewer/viewerCesiumInspectorMixin',
         'Cesium/Widgets/Viewer/viewerDragDropMixin',
@@ -21,17 +21,16 @@ define([
         formatError,
         getFilenameFromUri,
         CesiumMath,
-        queryToObject,
         objectToQuery,
+        queryToObject,
         CzmlDataSource,
         GeoJsonDataSource,
         KmlDataSource,
-        TileMapServiceImageryProvider,
+        createTileMapServiceImageryProvider,
         Viewer,
         viewerCesiumInspectorMixin,
         viewerDragDropMixin) {
-    "use strict";
-    /*global console*/
+    'use strict';
 
     /*
      * 'debug'  : true/false,   // Full WebGL error reporting at substantial performance cost.
@@ -48,7 +47,7 @@ define([
 
     var imageryProvider;
     if (endUserOptions.tmsImageryUrl) {
-        imageryProvider = new TileMapServiceImageryProvider({
+        imageryProvider = createTileMapServiceImageryProvider({
             url : endUserOptions.tmsImageryUrl
         });
     }
@@ -105,7 +104,10 @@ define([
         } else if (/\.geojson$/i.test(source) || /\.json$/i.test(source) || /\.topojson$/i.test(source)) {
             loadPromise = GeoJsonDataSource.load(source);
         } else if (/\.kml$/i.test(source) || /\.kmz$/i.test(source)) {
-            loadPromise = KmlDataSource.load(source);
+            loadPromise = KmlDataSource.load(source, {
+                camera: scene.camera,
+                canvas: scene.canvas
+            });
         } else {
             showLoadError(source, 'Unknown format.');
         }
@@ -156,10 +158,12 @@ define([
             var roll = ((splitQuery.length > 5) && (!isNaN(+splitQuery[5]))) ? CesiumMath.toRadians(+splitQuery[5]) : undefined;
 
             viewer.camera.setView({
-                position: Cartesian3.fromDegrees(longitude, latitude, height),
-                heading: heading,
-                pitch: pitch,
-                roll: roll
+                destination: Cartesian3.fromDegrees(longitude, latitude, height),
+                orientation: {
+                    heading: heading,
+                    pitch: pitch,
+                    roll: roll
+                }
             });
         }
     }

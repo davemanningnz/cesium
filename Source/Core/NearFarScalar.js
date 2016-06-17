@@ -7,7 +7,7 @@ define([
         defaultValue,
         defined,
         DeveloperError) {
-    "use strict";
+    'use strict';
 
     /**
      * Represents a scalar value's lower and upper bound at a near distance and far distance in eye space.
@@ -21,7 +21,7 @@ define([
      *
      * @see Packable
      */
-    var NearFarScalar = function(near, nearValue, far, farValue) {
+    function NearFarScalar(near, nearValue, far, farValue) {
         /**
          * The lower bound of the camera range.
          * @type {Number}
@@ -46,7 +46,7 @@ define([
          * @default 0.0
          */
         this.farValue = defaultValue(farValue, 0.0);
-    };
+    }
 
     /**
      * Duplicates a NearFarScalar instance.

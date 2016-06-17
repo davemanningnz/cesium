@@ -1,4 +1,4 @@
-/*global define,console*/
+/*global define*/
 define([
         '../../Core/buildModuleUrl',
         '../../Core/Cartesian3',
@@ -10,6 +10,7 @@ define([
         '../../Core/destroyObject',
         '../../Core/DeveloperError',
         '../../Core/Ellipsoid',
+        '../../Core/FeatureDetection',
         '../../Core/formatError',
         '../../Core/requestAnimationFrame',
         '../../Core/ScreenSpaceEventHandler',
@@ -33,6 +34,7 @@ define([
         destroyObject,
         DeveloperError,
         Ellipsoid,
+        FeatureDetection,
         formatError,
         requestAnimationFrame,
         ScreenSpaceEventHandler,
@@ -45,7 +47,7 @@ define([
         SkyBox,
         Sun,
         getElement) {
-    "use strict";
+    'use strict';
 
     function getDefaultSkyBoxUrl(suffix) {
         return buildModuleUrl('Assets/Textures/SkyBox/tycho2t3_80_' + suffix + '.jpg');
@@ -98,13 +100,16 @@ define([
         var canvas = widget._canvas;
         var width = canvas.clientWidth;
         var height = canvas.clientHeight;
-        var zoomFactor = defaultValue(window.devicePixelRatio, 1.0) * widget._resolutionScale;
+        var resolutionScale = widget._resolutionScale;
+        if (!widget._supportsImageRenderingPixelated) {
+            resolutionScale *= defaultValue(window.devicePixelRatio, 1.0);
+        }
 
         widget._canvasWidth = width;
         widget._canvasHeight = height;
 
-        width *= zoomFactor;
-        height *= zoomFactor;
+        width *= resolutionScale;
+        height *= resolutionScale;
 
         canvas.width = width;
         canvas.height = height;
@@ -153,6 +158,10 @@ define([
      * @param {Object} [options.contextOptions] Context and WebGL creation properties corresponding to <code>options</code> passed to {@link Scene}.
      * @param {Element|String} [options.creditContainer] The DOM element or ID that will contain the {@link CreditDisplay}.  If not specified, the credits are added
      *        to the bottom of the widget itself.
+     * @param {Number} [options.terrainExaggeration=1.0] A scalar used to exaggerate the terrain. Note that terrain exaggeration will not modify any other primitive as they are positioned relative to the ellipsoid.
+     * @param {Boolean} [options.shadows=false] Determines if shadows are cast by the sun.
+     * @param {Boolean} [options.terrainShadows=false] Determines if the terrain casts shadows from the sun.
+     * @param {MapMode2D} [options.mapMode2D=MapMode2D.INFINITE_SCROLL] Determines if the 2D map is rotatable or can be scrolled infinitely in the horizontal direction.
      *
      * @exception {DeveloperError} Element with id "container" does not exist in the document.
      *
@@ -167,9 +176,9 @@ define([
      *
      * //Widget with OpenStreetMaps imagery provider and Cesium terrain provider hosted by AGI.
      * var widget = new Cesium.CesiumWidget('cesiumContainer', {
-     *     imageryProvider : new Cesium.OpenStreetMapImageryProvider(),
+     *     imageryProvider : Cesium.createOpenStreetMapImageryProvider(),
      *     terrainProvider : new Cesium.CesiumTerrainProvider({
-     *         url : '//assets.agi.com/stk-terrain/world'
+     *         url : 'https://assets.agi.com/stk-terrain/world'
      *     }),
      *     // Use high-res stars downloaded from https://github.com/AnalyticalGraphicsInc/cesium-assets
      *     skyBox : new Cesium.SkyBox({
@@ -187,7 +196,7 @@ define([
      *     mapProjection : new Cesium.WebMercatorProjection()
      * });
      */
-    var CesiumWidget = function(container, options) {
+    function CesiumWidget(container, options) {
         //>>includeStart('debug', pragmas.debug);
         if (!defined(container)) {
             throw new DeveloperError('container is required.');
@@ -204,6 +213,12 @@ define([
         container.appendChild(element);
 
         var canvas = document.createElement('canvas');
+        var supportsImageRenderingPixelated = FeatureDetection.supportsImageRenderingPixelated();
+        this._supportsImageRenderingPixelated = supportsImageRenderingPixelated;
+        if (supportsImageRenderingPixelated) {
+            canvas.style.imageRendering = FeatureDetection.imageRenderingValue();
+        }
+
         canvas.oncontextmenu = function() {
             return false;
         };
@@ -242,7 +257,10 @@ define([
                 creditContainer : creditContainer,
                 mapProjection : options.mapProjection,
                 orderIndependentTranslucency : options.orderIndependentTranslucency,
-                scene3DOnly : defaultValue(options.scene3DOnly, false)
+                scene3DOnly : defaultValue(options.scene3DOnly, false),
+                terrainExaggeration : options.terrainExaggeration,
+                shadows : options.shadows,
+                mapMode2D : options.mapMode2D
             });
             this._scene = scene;
 
@@ -262,6 +280,7 @@ define([
             }
             if (globe !== false) {
                 scene.globe = globe;
+                scene.globe.castShadows = defaultValue(options.terrainShadows, false);
             }
 
             var skyBox = options.skyBox;
@@ -296,7 +315,7 @@ define([
             var imageryProvider = (options.globe === false) ? false : options.imageryProvider;
             if (!defined(imageryProvider)) {
                 imageryProvider = new BingMapsImageryProvider({
-                    url : '//dev.virtualearth.net'
+                    url : 'https://dev.virtualearth.net'
                 });
             }
 
@@ -343,7 +362,7 @@ define([
             }
             throw error;
         }
-    };
+    }
 
     defineProperties(CesiumWidget.prototype, {
         /**
@@ -462,8 +481,8 @@ define([
         /**
          * Gets or sets the target frame rate of the widget when <code>useDefaultRenderLoop</code>
          * is true. If undefined, the browser's {@link requestAnimationFrame} implementation
-         * determines the frame rate.  This value must be greater than 0 and a value higher than
-         * the underlying requestAnimationFrame implementatin will have no affect.
+         * determines the frame rate.  If defined, this value must be greater than 0.  A value higher
+         * than the underlying requestAnimationFrame implementation will have no effect.
          * @memberof CesiumWidget.prototype
          *
          * @type {Number}
@@ -474,7 +493,7 @@ define([
             },
             set : function(value) {
                 if (value <= 0) {
-                    throw new DeveloperError('targetFrameRate must be greater than 0.');
+                    throw new DeveloperError('targetFrameRate must be greater than 0, or undefined.');
                 }
                 this._targetFrameRate = value;
             }
@@ -561,9 +580,9 @@ define([
         var errorPanelScroller = document.createElement('div');
         errorPanelScroller.className = 'cesium-widget-errorPanel-scroll';
         content.appendChild(errorPanelScroller);
-        var resizeCallback = function() {
+        function resizeCallback() {
             errorPanelScroller.style.maxHeight = Math.max(Math.round(element.clientHeight * 0.9 - 100), 30) + 'px';
-        };
+        }
         resizeCallback();
         if (defined(window.addEventListener)) {
             window.addEventListener('resize', resizeCallback, false);

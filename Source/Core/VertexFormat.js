@@ -9,7 +9,7 @@ define([
         defined,
         DeveloperError,
         freezeObject) {
-    "use strict";
+    'use strict';
 
     /**
      * A vertex format defines what attributes make up a vertex.  A VertexFormat can be provided
@@ -31,7 +31,7 @@ define([
      * @see Geometry#attributes
      * @see Packable
      */
-    var VertexFormat = function(options) {
+    function VertexFormat(options) {
         options = defaultValue(options, defaultValue.EMPTY_OBJECT);
 
         /**
@@ -105,7 +105,7 @@ define([
          * @default false
          */
         this.color = defaultValue(options.color, false);
-    };
+    }
 
     /**
      * An immutable vertex format with only a position attribute.
@@ -223,9 +223,8 @@ define([
 
     /**
      * Stores the provided instance into the provided array.
-     * @function
      *
-     * @param {Object} value The value to pack.
+     * @param {VertexFormat} value The value to pack.
      * @param {Number[]} array The array to pack into.
      * @param {Number} [startingIndex=0] The index into the array at which to start packing the elements.
      */

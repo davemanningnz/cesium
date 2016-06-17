@@ -2,12 +2,15 @@
 defineSuite([
         'Scene/ImageryLayer',
         'Core/EllipsoidTerrainProvider',
-        'Core/jsonp',
         'Core/loadImage',
+        'Core/loadJsonp',
         'Core/loadWithXhr',
         'Core/Rectangle',
+        'Renderer/ComputeEngine',
         'Scene/ArcGisMapServerImageryProvider',
         'Scene/BingMapsImageryProvider',
+        'Scene/createTileMapServiceImageryProvider',
+        'Scene/Globe',
         'Scene/GlobeSurfaceTile',
         'Scene/Imagery',
         'Scene/ImageryLayerCollection',
@@ -15,19 +18,21 @@ defineSuite([
         'Scene/NeverTileDiscardPolicy',
         'Scene/QuadtreeTile',
         'Scene/SingleTileImageryProvider',
-        'Scene/TileMapServiceImageryProvider',
         'Scene/WebMapServiceImageryProvider',
-        'Specs/createContext',
+        'Specs/createScene',
         'Specs/pollToPromise'
     ], function(
         ImageryLayer,
         EllipsoidTerrainProvider,
-        jsonp,
         loadImage,
+        loadJsonp,
         loadWithXhr,
         Rectangle,
+        ComputeEngine,
         ArcGisMapServerImageryProvider,
         BingMapsImageryProvider,
+        createTileMapServiceImageryProvider,
+        Globe,
         GlobeSurfaceTile,
         Imagery,
         ImageryLayerCollection,
@@ -35,27 +40,30 @@ defineSuite([
         NeverTileDiscardPolicy,
         QuadtreeTile,
         SingleTileImageryProvider,
-        TileMapServiceImageryProvider,
         WebMapServiceImageryProvider,
-        createContext,
+        createScene,
         pollToPromise) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn*/
+    'use strict';
 
-    var context;
+    var scene;
+    var computeEngine;
 
     beforeAll(function() {
-        context = createContext();
+        scene = createScene();
+        computeEngine = new ComputeEngine(scene.context);
     });
 
     afterAll(function() {
-        context.destroyForSpecs();
+        scene.destroyForSpecs();
+        computeEngine.destroy();
     });
 
     afterEach(function() {
-        jsonp.loadAndExecuteScript = jsonp.defaultLoadAndExecuteScript;
+        loadJsonp.loadAndExecuteScript = loadJsonp.defaultLoadAndExecuteScript;
         loadImage.createImage = loadImage.defaultCreateImage;
         loadWithXhr.load = loadWithXhr.defaultLoad;
+
+        scene.frameState.commandList.length = 0;
     });
 
     function CustomDiscardPolicy() {
@@ -100,15 +108,15 @@ defineSuite([
             return pollToPromise(function() {
                 return imagery.state === ImageryState.RECEIVED;
             }).then(function() {
-                layer._createTexture(context, imagery);
+                layer._createTexture(scene.context, imagery);
                 expect(imagery.state).toEqual(ImageryState.INVALID);
                 imagery.releaseReference();
             });
         });
     });
 
-    it('reprojects web mercator images', function() {
-        jsonp.loadAndExecuteScript = function(url, functionName) {
+    function createWebMercatorProvider() {
+        loadJsonp.loadAndExecuteScript = function(url, functionName) {
             window[functionName]({
                 "authenticationResultCode" : "ValidCredentials",
                 "brandLogoUri" : "http:\/\/dev.virtualearth.net\/Branding\/logo_powered_by.png",
@@ -142,11 +150,14 @@ defineSuite([
             loadWithXhr.defaultLoad('Data/Images/Red16x16.png', responseType, method, data, headers, deferred);
         };
 
-        var provider = new BingMapsImageryProvider({
+        return new BingMapsImageryProvider({
             url : 'http://host.invalid',
             tileDiscardPolicy : new NeverTileDiscardPolicy()
         });
+    }
 
+    it('reprojects web mercator images', function() {
+        var provider = createWebMercatorProvider();
         var layer = new ImageryLayer(provider);
 
         return pollToPromise(function() {
@@ -159,13 +170,15 @@ defineSuite([
             return pollToPromise(function() {
                 return imagery.state === ImageryState.RECEIVED;
             }).then(function() {
-                layer._createTexture(context, imagery);
+                layer._createTexture(scene.context, imagery);
 
                 return pollToPromise(function() {
                     return imagery.state === ImageryState.TEXTURE_LOADED;
                 }).then(function() {
                     var textureBeforeReprojection = imagery.texture;
-                    layer._reprojectTexture(context, imagery);
+                    layer._reprojectTexture(scene.frameState, imagery);
+                    layer.queueReprojectionCommands(scene.frameState);
+                    scene.frameState.commandList[0].execute(computeEngine);
 
                     return pollToPromise(function() {
                         return imagery.state === ImageryState.READY;
@@ -173,6 +186,34 @@ defineSuite([
                         expect(textureBeforeReprojection).not.toEqual(imagery.texture);
                         imagery.releaseReference();
                     });
+                });
+            });
+        });
+    });
+
+    it('cancels reprojection', function() {
+        var provider = createWebMercatorProvider();
+        var layer = new ImageryLayer(provider);
+
+        return pollToPromise(function() {
+            return provider.ready;
+        }).then(function() {
+            var imagery = new Imagery(layer, 0, 0, 0);
+            imagery.addReference();
+            layer._requestImagery(imagery);
+
+            return pollToPromise(function() {
+                return imagery.state === ImageryState.RECEIVED;
+            }).then(function() {
+                layer._createTexture(scene.context, imagery);
+
+                return pollToPromise(function() {
+                    return imagery.state === ImageryState.TEXTURE_LOADED;
+                }).then(function() {
+                    layer._reprojectTexture(scene.frameState, imagery);
+                    layer.cancelReprojections();
+                    layer.queueReprojectionCommands(scene.frameState);
+                    expect(scene.frameState.commandList.length).toEqual(0);
                 });
             });
         });
@@ -226,9 +267,26 @@ defineSuite([
         });
     });
 
+    it('getViewableRectangle works', function() {
+        var providerRectangle = Rectangle.fromDegrees(8.2, 61.09, 8.5, 61.7);
+        var provider = new SingleTileImageryProvider({
+            url : 'Data/Images/Green4x4.png',
+            rectangle : providerRectangle
+        });
+
+        var layerRectangle = Rectangle.fromDegrees(7.2, 60.9, 9.0, 61.7);
+        var layer = new ImageryLayer(provider, {
+            rectangle : layerRectangle
+        });
+
+        return layer.getViewableRectangle().then(function(rectangle) {
+            expect(rectangle).toEqual(Rectangle.intersection(providerRectangle, layerRectangle));
+        });
+    });
+
     describe('createTileImagerySkeletons', function() {
         it('handles a base layer that does not cover the entire globe', function() {
-            var provider = new TileMapServiceImageryProvider({
+            var provider = createTileMapServiceImageryProvider({
                 url : 'Data/TMS/SmallArea'
             });
 
@@ -277,7 +335,7 @@ defineSuite([
                 url : 'Data/Images/Blue.png'
             });
 
-            var provider = new TileMapServiceImageryProvider({
+            var provider = createTileMapServiceImageryProvider({
                 url : 'Data/TMS/SmallArea'
             });
 
@@ -323,7 +381,7 @@ defineSuite([
                 url : 'Data/Images/Green4x4.png'
             });
 
-            var provider = new TileMapServiceImageryProvider({
+            var provider = createTileMapServiceImageryProvider({
                 url : 'Data/TMS/SmallArea'
             });
 

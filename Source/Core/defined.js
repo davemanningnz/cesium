@@ -1,6 +1,6 @@
 /*global define*/
 define(function() {
-    "use strict";
+    'use strict';
 
     /**
      * @exports defined
@@ -15,9 +15,9 @@ define(function() {
      *      doSomethingElse();
      * }
      */
-    var defined = function(value) {
-        return value !== undefined;
-    };
+    function defined(value) {
+        return value !== undefined && value !== null;
+    }
 
     return defined;
 });

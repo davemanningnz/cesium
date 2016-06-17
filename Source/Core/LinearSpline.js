@@ -13,7 +13,7 @@ define([
         defineProperties,
         DeveloperError,
         Spline) {
-    "use strict";
+    'use strict';
 
     /**
      * A spline that uses piecewise linear interpolation to create a curve.
@@ -29,13 +29,11 @@ define([
      * @exception {DeveloperError} points.length must be greater than or equal to 2.
      * @exception {DeveloperError} times.length must be equal to points.length.
      *
-     * @see HermiteSpline
-     * @see CatmullRomSpline
-     * @see QuaternionSpline
      *
      * @example
+     * var times = [ 0.0, 1.5, 3.0, 4.5, 6.0 ];
      * var spline = new Cesium.LinearSpline({
-     *     times : [ 0.0, 1.5, 3.0, 4.5, 6.0 ],
+     *     times : times,
      *     points : [
      *         new Cesium.Cartesian3(1235398.0, -4810983.0, 4146266.0),
      *         new Cesium.Cartesian3(1372574.0, -5345182.0, 4606657.0),
@@ -45,10 +43,13 @@ define([
      *     ]
      * });
      *
-     * var p0 = spline.evaluate(times[i]);         // equal to positions[i]
-     * var p1 = spline.evaluate(times[i] + delta); // interpolated value when delta < times[i + 1] - times[i]
+     * var p0 = spline.evaluate(times[0]);
+     * 
+     * @see HermiteSpline
+     * @see CatmullRomSpline
+     * @see QuaternionSpline
      */
-    var LinearSpline = function(options) {
+    function LinearSpline(options) {
         options = defaultValue(options, defaultValue.EMPTY_OBJECT);
 
         var points = options.points;
@@ -70,7 +71,7 @@ define([
         this._points = points;
 
         this._lastTimeIndex = 0;
-    };
+    }
 
     defineProperties(LinearSpline.prototype, {
         /**
