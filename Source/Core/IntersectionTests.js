@@ -1,6 +1,7 @@
 /*global define*/
 define([
         './Cartesian3',
+        './Plane',
         './Cartographic',
         './defaultValue',
         './defined',
@@ -12,6 +13,7 @@ define([
         './Ray'
     ], function(
         Cartesian3,
+        Plane,
         Cartographic,
         defaultValue,
         defined,
@@ -316,6 +318,12 @@ define([
         result.start = Math.max(result.start, 0.0);
         return result;
     };
+
+    IntersectionTests.planeSphere = function(plane, sphere) {
+        
+        return Plane.getPointDistance(plane, sphere.center) < sphere.radius; 
+        
+    }
 
     var scratchLineSegmentRay = new Ray();
 
