@@ -110,9 +110,7 @@
             return undefined;
         }
         
-       
-            result =  {};
-
+        result =  {};
 
         var mesh = terrain.mesh;
         if (!defined(mesh)) {
@@ -138,8 +136,7 @@
         var quaternion = Quaternion.fromAxisAngle(plane.normal, -Math.PI / 2.0);
         var rotation = Matrix3.fromQuaternion(quaternion);
         
-        var intersectionMap = {};
-        var nextPoint;
+        var intersectionMap = new Map();
         
         function calcOrentation(index){
             if (!orientations[index]){
@@ -149,7 +146,6 @@
         }
         
         var insectionLookup = {};
-        
 
         for (var i = 0; i < indices.length; i += 3) {
 
@@ -215,16 +211,35 @@
                 
                 var direction = Cartesian3.dot(Nt, scratchResult);
                 if (direction > 0) {
-                    intersectionMap[intersections[0]] = [intersections[0], intersections[1]];
-                    nextPoint = intersections[0];
+                    intersectionMap.set(intersections[0], [intersections[0], intersections[1]]);
                 } else {
-                    intersectionMap[intersections[1]] = [intersections[1], intersections[0]];
-                    nextPoint = intersections[1];
+                    intersectionMap.set(intersections[1], [intersections[1], intersections[0]]);
                 }                
             }    
                        
         }
 
+        for (var key of intersectionMap.keys()) {
+            var cur = intersectionMap.get(key);
+            if (cur) {
+                while (cur && intersectionMap.has(cur[cur.length - 1])) {
+                    var next = cur[cur.length - 1];
+                    cur.pop();
+                    cur = cur.concat(intersectionMap.get(next));
+                    intersectionMap.set(key, cur);
+                    intersectionMap.delete(next);
+                }
+            }
+        }
+
+        var polylines = [];
+
+        for (var section of intersectionMap.values()) {
+            polylines.push(section);
+        }
+
+        return polylines; 
+        
         function getIntersection(i0, i1) {
             var key = i0 > i1 ? i1 + "," + i0 : i0 + "," + i1;
             return (insectionLookup[key] = insectionLookup[key] || new Cartesian3());
@@ -235,48 +250,6 @@
             var bTest = Cartesian3.dot(boundPlaneB.normal, point) + boundPlaneB.distance < 0
             return (aTest && boundDirectionA || !aTest && !boundDirectionA) && (bTest && boundDirectionB || !bTest && !boundDirectionB);
         }
-
-        // return intersections;
-       
-        var polyline = []
-
-        for (var candiadate in intersectionMap) {
-            polyline.push(intersectionMap[candiadate][0]);
-            polyline.push(intersectionMap[candiadate][1]);
-            // var cur = intersectionMap[candiadate];
-            // if (cur) {
-            //     while (cur && intersectionMap[cur[cur.length - 1]]) {
-            //         var next = cur[cur.length - 1];
-            //         cur.pop();
-            //         cur = cur.concat(intersectionMap[next]);
-            //         intersectionMap[candiadate] = cur;
-            //         intersectionMap[next] = false;
-            //     }
-            //     if (cur.length > polyline.length) {
-            //         polyline = cur;
-            //     }
-            // }
-        }
-
-        // var lastPoint;
-        // do {
-        //     var curPoint = nextPoint;
-        //     polyline.push(curPoint);
-        //     var adjacent = intersectionMap[nextPoint];
-        //     if (!adjacent) {
-        //         break;
-        //     }
-        //     if (lastPoint !== adjacent[0]) {
-        //         nextPoint = adjacent[0];
-        //     } else if (adjacent.length == 2) {
-        //         nextPoint = adjacent[1];
-        //     } else {
-        //         nextPoint = null;
-        //     }
-        //     lastPoint = curPoint;
-        // } while (nextPoint !== null);
-
-        return polyline; 
     }
     
 

@@ -137,7 +137,7 @@ Globe.prototype.fillPath = function(rayA, rayB, scene, result) {
         length = sphereIntersections.length;
         for (i = 0; i < length; ++i) {
             var section = sphereIntersections[i].fillPath(rayA, rayB, scene.mode, scene.mapProjection, true, result);
-            intersection = intersection.concat(section);
+            intersection.push(section);
 
             // if (intersection.length == 0) {
             //     intersection = section;
