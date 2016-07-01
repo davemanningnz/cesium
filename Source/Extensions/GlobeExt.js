@@ -74,20 +74,26 @@ var scratchSphereIntersectionResult = {
     stop : 0.0
 };
     
-Globe.prototype.fillPath = function(rayA, rayB, scene, result) {
+Globe.prototype.fillPath = function(origin, start, end, scene, result) {
         //>>includeStart('debug', pragmas.debug);
-        if (!defined(rayA)) {
-            throw new DeveloperError('rayA is required');
+        if (!defined(origin)) {
+            throw new DeveloperError('origin is required');
         }
-        if (!defined(rayB)) {
-            throw new DeveloperError('rayB is required');
+        if (!defined(start)) {
+            throw new DeveloperError('start is required');
+        }
+        if (!defined(end)) {
+            throw new DeveloperError('end is required');
         }
         if (!defined(scene)) {
             throw new DeveloperError('scene is required');
         }
         //>>includeEnd('debug');
 
-        var planeNormal = Cartesian3.cross(rayA.direction, rayB.direction, new Cartesian3());
+        var rayA = new Cesium.Ray(origin, Cesium.Cartesian3.subtract(end, origin, new Cesium.Cartesian3()));
+        var rayB = new Cesium.Ray(origin, Cesium.Cartesian3.subtract(start, origin, new Cesium.Cartesian3()));
+
+        var planeNormal = Cartesian3.cross(rayB.direction, rayA.direction, new Cartesian3());
         var plane = Plane.fromPointNormal(rayA.origin, planeNormal);
 
         var rayANormal = Cartesian3.cross(rayA.direction, planeNormal, new Cartesian3());
@@ -136,9 +142,13 @@ Globe.prototype.fillPath = function(rayA, rayB, scene, result) {
         var intersection = [];
         length = sphereIntersections.length;
         for (i = 0; i < length; ++i) {
-            var section = sphereIntersections[i].fillPath(rayA, rayB, scene.mode, scene.mapProjection, true, result);
-            intersection.push(section);
-
+            var tile = sphereIntersections[i].fillPath(rayA, rayB, scene.mode, scene.mapProjection, true, result);
+            tile.forEach(function(section){
+                if (section.length > 0) {
+                    intersection.push(section);
+                }
+            });
+                      
             // if (intersection.length == 0) {
             //     intersection = section;
             // } else {
@@ -160,6 +170,36 @@ Globe.prototype.fillPath = function(rayA, rayB, scene, result) {
             // }
         }
 
-        return intersection;
+        var curSection = intersection.pop();
+        while (intersection.length > 0) {
+            var nom;
+            var nomDist;
+            var before;
+            for (var ci = 0; ci < intersection.length; ci++) {
+                var canDist = Cartesian3.distanceSquared(curSection[curSection.length - 1], intersection[ci][0]);
+                if (canDist < nomDist || nomDist === undefined) {
+                    nomDist = canDist;
+                    nom = ci;
+                    before = false;
+                }
+                canDist = Cartesian3.distanceSquared(curSection[0], intersection[ci][intersection[ci].length - 1]);
+                if (canDist < nomDist || nomDist === undefined) {
+                    nomDist = canDist;
+                    nom = ci;
+                    before = true;
+                }
+            }
+            if (before) {
+                curSection = intersection[nom].concat(curSection); 
+            } else {
+                curSection = curSection.concat(intersection[nom]);
+            }
+            intersection.splice(nom, 1);
+        }
+
+        curSection.unshift(start);
+        curSection.push(end)
+
+        return [[curSection]];
     };
 });

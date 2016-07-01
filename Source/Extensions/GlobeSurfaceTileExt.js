@@ -147,7 +147,7 @@
         
         var insectionLookup = {};
 
-        for (var i = 0; i < indices.length; i += 3) {
+        for (var i = 0; i < terrain.data._skirtIndex; i += 3) {
 
             var intersections = [];
 
