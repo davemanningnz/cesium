@@ -38,11 +38,41 @@
         
         return result;
     }
+
+    function getNormal(encoding, vertices, index, result) {
+        var en0 = encoding.getOctEncodedNormal(vertices, index);
+
+        return AttributeCompression.octDecode(en0.x, en0.y, result || new Cartesian3());
+    }
+
+    function interpolateNormal(positions, normals, intersection, result) {
+        var barycentric = barycentricCoordinates(intersection, positions[0], positions[1], positions[2]);
+
+        var multScratch = new Cartesian3();
+        result = result || new Cartesian3();
+        
+        Cartesian3.multiplyByScalar(normals[0], barycentric.x, multScratch);
+        Cartesian3.add(result, multScratch, result);
+        Cartesian3.multiplyByScalar(normals[1], barycentric.y, multScratch);
+        Cartesian3.add(result, multScratch, result);
+        Cartesian3.multiplyByScalar(normals[2], barycentric.z, multScratch);
+        Cartesian3.add(result, multScratch, result);
+
+        return result;
+    }
     
     var scratchV0 = new Cartesian3();
     var scratchV1 = new Cartesian3();
     var scratchV2 = new Cartesian3();
     var scratchResult = new Cartesian3();
+
+    GlobeSurfaceTile.prototype.getPosition = function(index) {
+        return getPosition(this.pickTerrain.mesh.encoding, undefined, undefined, this.pickTerrain.mesh.vertices, index, new Cartesian3());
+    }
+
+    GlobeSurfaceTile.prototype.getNormal = function(index) {
+        return getNormal(this.pickTerrain.mesh.encoding, this.pickTerrain.mesh.vertices, index);
+    }
 
     GlobeSurfaceTile.prototype.pick = function (ray, mode, projection, cullBackFaces, result) {
         var terrain = this.pickTerrain;
@@ -75,28 +105,14 @@
             
             var intersection = IntersectionTests.rayTriangle(ray, v0, v1, v2, cullBackFaces, scratchResult);
             if (defined(intersection)) {
+            
+                var n0 = getNormal(encoding, vertices, i0);
+                var n1 = getNormal(encoding, vertices, i1);
+                var n2 = getNormal(encoding, vertices, i2);
                 
-                var en0 = encoding.getOctEncodedNormal(vertices, i0);
-                var en1 = encoding.getOctEncodedNormal(vertices, i1);
-                var en2 = encoding.getOctEncodedNormal(vertices, i2);
-
-                var n0 = AttributeCompression.octDecode(en0.x, en0.y, new Cartesian3());
-                var n1 = AttributeCompression.octDecode(en1.x, en1.y, new Cartesian3());
-                var n2 = AttributeCompression.octDecode(en2.x, en2.y, new Cartesian3());
-                
-                var barycentric = barycentricCoordinates(intersection, v0, v1, v2);
-                
-                var multScratch = new Cartesian3();
                 result.position = new Cartesian3();
-                result.norm = new Cartesian3();
+                result.norm = interpolateNormal([v0, v1, v2], [n0, n1, n2], intersection);
                 
-                Cartesian3.multiplyByScalar(n0, barycentric.x, multScratch);
-                Cartesian3.add(result.norm, multScratch, result.norm);
-                Cartesian3.multiplyByScalar(n1, barycentric.y, multScratch);
-                Cartesian3.add(result.norm, multScratch, result.norm);
-                Cartesian3.multiplyByScalar(n2, barycentric.z, multScratch);
-                Cartesian3.add(result.norm, multScratch, result.norm);
-
                 return Cartesian3.clone(intersection, result.position);
             }
         }
@@ -173,7 +189,8 @@
                 } 
             } else if (p0Behind != p1Behind) {
                 var u1 = getIntersection(i0, i1);  
-                IntersectionTests.lineSegmentPlane(p0, p1, plane, u1);
+                IntersectionTests.lineSegmentPlane(p0, p1, plane, u1.position);
+                findNormal([p0, p1, p2], [i0, i1, i2], u1);
                 intersections.push(u1);
             }
             
@@ -183,7 +200,8 @@
                 } 
             } else if (p0Behind != p2Behind) {
                 var u2 = getIntersection(i0, i2);  
-                IntersectionTests.lineSegmentPlane(p0, p2, plane, u2);
+                IntersectionTests.lineSegmentPlane(p0, p2, plane, u2.position);
+                findNormal([p0, p1, p2], [i0, i1, i2], u2);
                 intersections.push(u2);
             }
             
@@ -193,7 +211,8 @@
                 } 
             } else if (p1Behind != p2Behind) {
                 var u3 = getIntersection(i1, i2);    
-                IntersectionTests.lineSegmentPlane(p1, p2, plane, u3);
+                IntersectionTests.lineSegmentPlane(p1, p2, plane, u3.position);
+                findNormal([p0, p1, p2], [i0, i1, i2], u3);
                 intersections.push(u3);
             }
 
@@ -206,7 +225,7 @@
                 // nextPoint = intersections[0];
 
                 var Nt = Cartesian3.cross(Cartesian3.subtract(p1, p0, new Cartesian3()), Cartesian3.subtract(p2, p0, new Cartesian3()), new Cartesian3());
-                var Ie = Cartesian3.subtract(intersections[1], intersections[0], new Cartesian3());
+                var Ie = Cartesian3.subtract(intersections[1].position, intersections[0].position, new Cartesian3());
                 Matrix3.multiplyByVector(rotation, Ie, scratchResult);
                 
                 var direction = Cartesian3.dot(Nt, scratchResult);
@@ -242,13 +261,21 @@
         
         function getIntersection(i0, i1) {
             var key = i0 > i1 ? i1 + "," + i0 : i0 + "," + i1;
-            return (insectionLookup[key] = insectionLookup[key] || new Cartesian3());
+            return (insectionLookup[key] = insectionLookup[key] || { position: new Cartesian3(), normal: new Cartesian3() });
         }
 
         function withinPath(point) {
-            var aTest = Cartesian3.dot(boundPlaneA.normal, point) + boundPlaneA.distance < 0
-            var bTest = Cartesian3.dot(boundPlaneB.normal, point) + boundPlaneB.distance < 0
+            var aTest = Cartesian3.dot(boundPlaneA.normal, point.position) + boundPlaneA.distance < 0
+            var bTest = Cartesian3.dot(boundPlaneB.normal, point.position) + boundPlaneB.distance < 0
             return (aTest && boundDirectionA || !aTest && !boundDirectionA) && (bTest && boundDirectionB || !bTest && !boundDirectionB);
+        }
+
+        function findNormal(positions, indicies, intersection) {
+            var n0 = getNormal(encoding, vertices, i0);
+            var n1 = getNormal(encoding, vertices, i1);
+            var n2 = getNormal(encoding, vertices, i2);
+            
+            interpolateNormal(positions, [n0, n1, n2], intersection.position, intersection.normal);
         }
     }
     

@@ -73,7 +73,69 @@ var scratchSphereIntersectionResult = {
     start : 0.0,
     stop : 0.0
 };
-    
+
+Globe.prototype.diverganceOverlay = function() {
+    var tilesToRender = this._surface._tilesToRender;
+    var divergencies = [];
+
+    for (i = 0; i < tilesToRender.length; ++i) {
+        tile = tilesToRender[i];
+        var tileData = tile.data;
+        var mesh = tileData.pickTerrain.mesh;
+        var al = buildAdjacencies(mesh.indices);
+
+        for (var index in al) {
+            var div = 0;
+            var num = 0;
+            var startPos = tileData.getPosition(index);
+            var startNorm = tileData.getNormal(index);
+            for (var adj in al[index]) {
+                var adjPos = tileData.getPosition(adj);
+                var adjNorm = tileData.getNormal(adj);
+
+                var dp = Cartesian3.subtract(adjPos, startPos, new Cartesian3());
+                var dn = Cartesian3.subtract(adjNorm, startNorm, new Cartesian3());
+
+                if (dn.x && dn.y && dn.z && dp.x && dp.y && dp.z) {
+                    div += dn.x / dp.x + dn.y / dp.y + dn.z / dp.z;
+                    num++;
+                }
+            }
+
+            divergencies.push({position: startPos, divergance: div / num});
+        }
+    }
+
+    return divergencies;
+
+    function buildAdjacencies(indecies){  
+        var al = {};
+        
+        for (var i = 0; i <  indecies.length; i++) {
+            var cur = indecies[i];
+            if (!al[cur]) {
+                al[cur] = {};
+            }
+            switch (i % 3) {
+                case 0:
+                    al[cur][indecies[i+1]] = true;
+                    al[cur][indecies[i+2]] = true;
+                    break;
+                case 1:
+                    al[cur][indecies[i-1]] = true;
+                    al[cur][indecies[i+1]] = true;
+                    break;
+                case 2:
+                    al[cur][indecies[i-2]] = true;
+                    al[cur][indecies[i-1]] = true;
+                    break;
+            }
+        }
+        
+        return al;
+    }
+}
+
 Globe.prototype.fillPath = function(origin, start, end, scene, result) {
         //>>includeStart('debug', pragmas.debug);
         if (!defined(origin)) {
@@ -90,8 +152,8 @@ Globe.prototype.fillPath = function(origin, start, end, scene, result) {
         }
         //>>includeEnd('debug');
 
-        var rayA = new Cesium.Ray(origin, Cesium.Cartesian3.subtract(end, origin, new Cesium.Cartesian3()));
-        var rayB = new Cesium.Ray(origin, Cesium.Cartesian3.subtract(start, origin, new Cesium.Cartesian3()));
+        var rayA = new Cesium.Ray(origin, Cesium.Cartesian3.subtract(end.position, origin, new Cesium.Cartesian3()));
+        var rayB = new Cesium.Ray(origin, Cesium.Cartesian3.subtract(start.position, origin, new Cesium.Cartesian3()));
 
         var planeNormal = Cartesian3.cross(rayB.direction, rayA.direction, new Cartesian3());
         var plane = Plane.fromPointNormal(rayA.origin, planeNormal);
@@ -148,26 +210,6 @@ Globe.prototype.fillPath = function(origin, start, end, scene, result) {
                     intersection.push(section);
                 }
             });
-                      
-            // if (intersection.length == 0) {
-            //     intersection = section;
-            // } else {
-            //     if (intersection[intersection.length - 1].equals(section[0])){
-            //         intersection.pop();
-                    
-            //     } else if (intersection[intersection.length - 1].equals(section[section.length - 1])){
-            //         intersection.pop();
-            //         section.reverse();
-            //         intersection = intersection.concat(section);
-            //     } else if (intersection[0].equals(section[section.length - 1])){
-            //         section.pop();
-            //         intersection = section.concat(intersection);
-            //     } else if (intersection[0].equals(section[0])){
-            //         intersection.reverse();
-            //         intersection.pop();
-            //         intersection = intersection.concat(section);
-            //     }
-            // }
         }
 
         var curSection = intersection.pop();
@@ -176,13 +218,13 @@ Globe.prototype.fillPath = function(origin, start, end, scene, result) {
             var nomDist;
             var before;
             for (var ci = 0; ci < intersection.length; ci++) {
-                var canDist = Cartesian3.distanceSquared(curSection[curSection.length - 1], intersection[ci][0]);
+                var canDist = Cartesian3.distanceSquared(curSection[curSection.length - 1].position, intersection[ci][0].position);
                 if (canDist < nomDist || nomDist === undefined) {
                     nomDist = canDist;
                     nom = ci;
                     before = false;
                 }
-                canDist = Cartesian3.distanceSquared(curSection[0], intersection[ci][intersection[ci].length - 1]);
+                canDist = Cartesian3.distanceSquared(curSection[0].position, intersection[ci][intersection[ci].length - 1].position);
                 if (canDist < nomDist || nomDist === undefined) {
                     nomDist = canDist;
                     nom = ci;
@@ -202,4 +244,6 @@ Globe.prototype.fillPath = function(origin, start, end, scene, result) {
 
         return [[curSection]];
     };
+
+
 });
