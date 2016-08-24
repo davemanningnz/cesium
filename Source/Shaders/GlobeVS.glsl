@@ -5,6 +5,10 @@ attribute vec4 position3DAndHeight;
 attribute vec3 textureCoordAndEncodedNormals;
 #endif
 
+#ifdef VERTEX_COLOR
+attribute vec4 vertexColor;
+#endif
+
 uniform vec3 u_center3D;
 uniform mat4 u_modifiedModelView;
 uniform mat4 u_modifiedModelViewProjection;
@@ -20,6 +24,10 @@ varying vec3 v_positionEC;
 varying vec2 v_textureCoordinates;
 varying vec3 v_normalMC;
 varying vec3 v_normalEC;
+
+#ifdef VERTEX_COLOR
+varying vec4 v_vertexColor;
+#endif
 
 #ifdef FOG
 varying float v_distance;
@@ -118,6 +126,10 @@ void main()
 
     vec3 position3DWC = position + u_center3D;
     gl_Position = getPosition(position, height, textureCoordinates);
+
+#ifdef VERTEX_COLOR
+    v_vertexColor = vertexColor;
+#endif
 
     v_textureCoordinates = textureCoordinates;
 

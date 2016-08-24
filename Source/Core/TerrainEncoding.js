@@ -44,7 +44,7 @@ define([
      *
      * @private
      */
-    function TerrainEncoding(axisAlignedBoundingBox, minimumHeight, maximumHeight, fromENU, hasVertexNormals) {
+    function TerrainEncoding(axisAlignedBoundingBox, minimumHeight, maximumHeight, fromENU, hasVertexNormals, hasVertexColors) {
         var quantization;
         var center;
         var toENU;
@@ -137,9 +137,16 @@ define([
          * @type {Boolean}
          */
         this.hasVertexNormals = hasVertexNormals;
+
+        this.hasVertexColors = hasVertexColors || false;
+
+        if (this.hasVertexColors) {
+            attributesNone["vertexColor"] = 2;
+            attributes["vertexColor"] = 1;
+        }
     }
 
-    TerrainEncoding.prototype.encode = function(vertexBuffer, bufferIndex, position, uv, height, normalToPack) {
+    TerrainEncoding.prototype.encode = function(vertexBuffer, bufferIndex, position, uv, height, normalToPack, color) {
         var u = uv.x;
         var v = uv.y;
 
@@ -178,6 +185,9 @@ define([
 
         if (this.hasVertexNormals) {
             vertexBuffer[bufferIndex++] = AttributeCompression.octPackFloat(normalToPack);
+        }
+        if (this.hasVertexColors) {
+            vertexBuffer[bufferIndex++] = color.toRgba();
         }
 
         return bufferIndex;
@@ -271,13 +281,14 @@ define([
 
     TerrainEncoding.prototype.getAttributes = function(buffer) {
         var datatype = ComponentDatatype.FLOAT;
+        var sizeInBytes = ComponentDatatype.getSizeInBytes(datatype);
+        var withoutColors = undefined;
 
         if (this.quantization === TerrainQuantization.NONE) {
-            var sizeInBytes = ComponentDatatype.getSizeInBytes(datatype);
             var position3DAndHeightLength = 4;
             var numTexCoordComponents = this.hasVertexNormals ? 3 : 2;
             var stride = (this.hasVertexNormals ? 7 : 6) * sizeInBytes;
-            return [{
+            withoutColors = [{
                 index : attributesNone.position3DAndHeight,
                 vertexBuffer : buffer,
                 componentDatatype : datatype,
@@ -296,12 +307,31 @@ define([
 
         var numComponents = 3;
         numComponents += this.hasVertexNormals ? 1 : 0;
-        return [{
-            index : attributes.compressed,
-            vertexBuffer : buffer,
-            componentDatatype : datatype,
-            componentsPerAttribute : numComponents
-        }];
+        withoutColors = [{
+                    index : attributes.compressed,
+                    vertexBuffer : buffer,
+                    componentDatatype : datatype,
+                    componentsPerAttribute : numComponents,
+                    offsetInBytes: 0,
+                    strideInBytes : numComponents * sizeInBytes
+                }];
+
+        if (this.hasVertexColors) {
+            var oldStride = withoutColors[0].stride;
+            var newStride = oldStride + 4;
+
+            withoutColors.forEach(function(attr) { attr.stride = newStride;});
+            withoutColors.push({
+                    index : this.quantization === TerrainQuantization.NONE ? attributesNone.vertexColor : attributes.vertexColor,
+                    vertexBuffer : buffer,
+                    componentDatatype : ComponentDatatype.UNSIGNED_BYTE,
+                    componentsPerAttribute : 4,
+                    offsetInBytes : oldStride,
+                    strideInBytes : newStride
+            });
+        }
+
+        return withoutColors;
     };
 
     TerrainEncoding.prototype.getAttributeLocations = function() {

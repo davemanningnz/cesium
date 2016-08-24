@@ -148,6 +148,11 @@ define([
                 }
             }
 
+            if (terrainEncoding.hasVertexColors) {
+                vs.defines.push('VERTEX_COLOR');
+                fs.defines.push('VERTEX_COLOR');
+            }
+
             if (enableFog) {
                 vs.defines.push('FOG');
                 fs.defines.push('FOG');
