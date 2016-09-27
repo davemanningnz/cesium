@@ -138,15 +138,10 @@ define([
          */
         this.hasVertexNormals = hasVertexNormals;
 
-        this.hasVertexColors = hasVertexColors || false;
-
-        if (this.hasVertexColors) {
-            attributesNone["vertexColor"] = 2;
-            attributes["vertexColor"] = 1;
-        }
+        this.hasVertexColors = hasVertexColors;
     }
 
-    TerrainEncoding.prototype.encode = function(vertexBuffer, bufferIndex, position, uv, height, normalToPack, color) {
+    TerrainEncoding.prototype.encode = function(vertexBuffer, bufferIndex, position, uv, height, normalToPack) {
         var u = uv.x;
         var v = uv.y;
 
@@ -185,9 +180,6 @@ define([
 
         if (this.hasVertexNormals) {
             vertexBuffer[bufferIndex++] = AttributeCompression.octPackFloat(normalToPack);
-        }
-        if (this.hasVertexColors) {
-            vertexBuffer[bufferIndex++] = color.toRgba();
         }
 
         return bufferIndex;
@@ -271,74 +263,92 @@ define([
         return vertexStride;
     };
 
-    var attributesNone = {
-        position3DAndHeight : 0,
-        textureCoordAndEncodedNormals : 1
-    };
-    var attributes = {
-        compressed : 0
-    };
-
     TerrainEncoding.prototype.getAttributes = function(buffer) {
+        var attributeLocations = this.getAttributeLocations();
         var datatype = ComponentDatatype.FLOAT;
         var sizeInBytes = ComponentDatatype.getSizeInBytes(datatype);
-        var withoutColors = undefined;
 
         if (this.quantization === TerrainQuantization.NONE) {
             var position3DAndHeightLength = 4;
             var numTexCoordComponents = this.hasVertexNormals ? 3 : 2;
-            var stride = (this.hasVertexNormals ? 7 : 6) * sizeInBytes;
-            withoutColors = [{
-                index : attributesNone.position3DAndHeight,
+            var stride = ((this.hasVertexNormals ? 7 : 6) + (this.hasVertexColors ? 1 : 0)) * sizeInBytes;
+            var attributes = [{
+                index : attributeLocations.position3DAndHeight,
                 vertexBuffer : buffer,
                 componentDatatype : datatype,
                 componentsPerAttribute : position3DAndHeightLength,
                 offsetInBytes : 0,
                 strideInBytes : stride
             }, {
-                index : attributesNone.textureCoordAndEncodedNormals,
+                index : attributeLocations.textureCoordAndEncodedNormals,
                 vertexBuffer : buffer,
                 componentDatatype : datatype,
                 componentsPerAttribute : numTexCoordComponents,
                 offsetInBytes : position3DAndHeightLength * sizeInBytes,
                 strideInBytes : stride
             }];
+            if (this.hasVertexColors) {
+                attributes.push({
+                    index : attributeLocations.vertexColor,
+                    vertexBuffer : buffer,
+                    componentDatatype : ComponentDatatype.UNSIGNED_BYTE,
+                    componentsPerAttribute : 4,
+                    offsetInBytes : (position3DAndHeightLength + numTexCoordComponents) * sizeInBytes,
+                    strideInBytes : stide
+                });
+            }
+            return attributes;
         }
 
         var numComponents = 3;
         numComponents += this.hasVertexNormals ? 1 : 0;
-        withoutColors = [{
-                    index : attributes.compressed,
-                    vertexBuffer : buffer,
-                    componentDatatype : datatype,
-                    componentsPerAttribute : numComponents,
-                    offsetInBytes: 0,
-                    strideInBytes : numComponents * sizeInBytes
-                }];
-
+        var stide = this.hasVertexColors ? (numComponents + 1) * sizeInBytes : numComponents * sizeInBytes;
+        var attributes = [{
+            index : attributeLocations.compressed,
+            vertexBuffer : buffer,
+            componentDatatype : datatype,
+            componentsPerAttribute : numComponents,
+            offsetInBytes : 0,
+            strideInBytes : stide
+        }];
         if (this.hasVertexColors) {
-            var oldStride = withoutColors[0].stride;
-            var newStride = oldStride + 4;
-
-            withoutColors.forEach(function(attr) { attr.stride = newStride;});
-            withoutColors.push({
-                    index : this.quantization === TerrainQuantization.NONE ? attributesNone.vertexColor : attributes.vertexColor,
-                    vertexBuffer : buffer,
-                    componentDatatype : ComponentDatatype.UNSIGNED_BYTE,
-                    componentsPerAttribute : 4,
-                    offsetInBytes : oldStride,
-                    strideInBytes : newStride
+            attributes.push({
+                index : attributeLocations.vertexColor,
+                vertexBuffer : buffer,
+                componentDatatype : ComponentDatatype.UNSIGNED_BYTE,
+                componentsPerAttribute : 4,
+                offsetInBytes : numComponents * sizeInBytes,
+                strideInBytes : stide
             });
         }
-
-        return withoutColors;
+        return attributes;
     };
 
     TerrainEncoding.prototype.getAttributeLocations = function() {
         if (this.quantization === TerrainQuantization.NONE) {
-            return attributesNone;
+            if (this.hasVertexColors) {
+                return {
+                    position3DAndHeight : 0,
+                    textureCoordAndEncodedNormals : 1,
+                    vertexColor: 2
+                };
+            } else {
+                return {
+                    position3DAndHeight : 0,
+                    textureCoordAndEncodedNormals : 1
+                };
+            }
         } else {
-            return attributes;
+            if (this.hasVertexColors) {
+                return {
+                    compressed : 0,
+                    vertexColor: 1
+                };
+            } else {
+                return {
+                    compressed : 0
+                };
+            }
         }
     };
 
