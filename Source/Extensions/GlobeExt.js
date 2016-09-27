@@ -84,50 +84,48 @@ Globe.prototype.diverganceOverlay = function() {
         var mesh = tileData.pickTerrain.mesh;
         var al = buildAdjacencies(mesh.indices);
 
-        for (var index in al) {
+        for (var index of al.keys()) {
             var div = 0;
             var num = 0;
             var startPos = tileData.getPosition(index);
             var startNorm = tileData.getNormal(index);
-            for (var adj in al[index]) {
+            for (var adj of al.get(index)) {
                 var adjPos = tileData.getPosition(adj);
                 var adjNorm = tileData.getNormal(adj);
 
                 var dp = Cartesian3.subtract(adjPos, startPos, new Cartesian3());
                 var dn = Cartesian3.subtract(adjNorm, startNorm, new Cartesian3());
 
-                if (dn.x && dn.y && dn.z && dp.x && dp.y && dp.z) {
-                    div += dn.x / dp.x + dn.y / dp.y + dn.z / dp.z;
-                    num++;
+                var div = dn.x / dp.x + dn.y / dp.y + dn.z / dp.z;
+                if (div) {
+                    divergencies.push({start: startPos, end: adjPos, divergance: div});
                 }
             }
-
-            divergencies.push({position: startPos, divergance: div / num});
         }
     }
 
     return divergencies;
 
     function buildAdjacencies(indecies){  
-        var al = {};
+        var al = new Map();
         
         for (var i = 0; i <  indecies.length; i++) {
             var cur = indecies[i];
-            if (!al[cur]) {
-                al[cur] = {};
+            if (!al.get(cur)) {
+                al.set(cur, new Set());
             }
             switch (i % 3) {
                 case 0:
-                    al[cur][indecies[i+1]] = true;
-                    al[cur][indecies[i+2]] = true;
+                    al.get(cur).add(indecies[i+1]);
+                    al.get(cur).add(indecies[i+2]);
                     break;
                 case 1:
-                    al[cur][indecies[i-1]] = true;
-                    al[cur][indecies[i+1]] = true;
+                    al.get(cur).add(indecies[i-1]);
+                    al.get(cur).add(indecies[i+1]);
                     break;
                 case 2:
-                    al[cur][indecies[i-2]] = true;
-                    al[cur][indecies[i-1]] = true;
+                    al.get(cur).add(indecies[i-2]);
+                    al.get(cur).add(indecies[i-1]);
                     break;
             }
         }
