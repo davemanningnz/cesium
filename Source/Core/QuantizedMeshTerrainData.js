@@ -232,7 +232,7 @@ define([
         }
     }
 
-    var createMeshTaskProcessor = new TaskProcessor('createVerticesFromQuantizedTerrainMesh');
+    var createMeshTaskProcessor = new TaskProcessor('createColoredVerticesFromQuantizedTerrainMesh');
 
     /**
      * Creates a {@link TerrainMesh} from this terrain data.

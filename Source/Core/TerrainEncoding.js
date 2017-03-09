@@ -141,7 +141,7 @@ define([
         this.hasVertexColors = hasVertexColors;
     }
 
-    TerrainEncoding.prototype.encode = function(vertexBuffer, bufferIndex, position, uv, height, normalToPack) {
+    TerrainEncoding.prototype.encode = function(vertexBuffer, bufferIndex, position, uv, height, normalToPack, color) {
         var u = uv.x;
         var v = uv.y;
 
@@ -180,6 +180,9 @@ define([
 
         if (this.hasVertexNormals) {
             vertexBuffer[bufferIndex++] = AttributeCompression.octPackFloat(normalToPack);
+        }
+        if (this.hasVertexColors) {
+            vertexBuffer[bufferIndex++] = color.toRgba();
         }
 
         return bufferIndex;
@@ -236,7 +239,7 @@ define([
 
     TerrainEncoding.prototype.getOctEncodedNormal = function(buffer, index, result) {
         var stride = this.getStride();
-        index = (index + 1) * stride - 1;
+        index = (index + 1) * stride - (this.hasVertexColors ? 2 : 1);
 
         var temp = buffer[index] / 256.0;
         var x = Math.floor(temp);
@@ -257,6 +260,10 @@ define([
         }
 
         if (this.hasVertexNormals) {
+            ++vertexStride;
+        }
+
+        if (this.hasVertexColors) {
             ++vertexStride;
         }
 
@@ -292,9 +299,10 @@ define([
                     index : attributeLocations.vertexColor,
                     vertexBuffer : buffer,
                     componentDatatype : ComponentDatatype.UNSIGNED_BYTE,
+                    normalize : true,
                     componentsPerAttribute : 4,
                     offsetInBytes : (position3DAndHeightLength + numTexCoordComponents) * sizeInBytes,
-                    strideInBytes : stide
+                    strideInBytes : stride
                 });
             }
             return attributes;
@@ -302,23 +310,24 @@ define([
 
         var numComponents = 3;
         numComponents += this.hasVertexNormals ? 1 : 0;
-        var stide = this.hasVertexColors ? (numComponents + 1) * sizeInBytes : numComponents * sizeInBytes;
+        var stride = this.hasVertexColors ? (numComponents + 1) * sizeInBytes : numComponents * sizeInBytes;
         var attributes = [{
             index : attributeLocations.compressed,
             vertexBuffer : buffer,
             componentDatatype : datatype,
             componentsPerAttribute : numComponents,
             offsetInBytes : 0,
-            strideInBytes : stide
+            strideInBytes : stride
         }];
         if (this.hasVertexColors) {
             attributes.push({
                 index : attributeLocations.vertexColor,
                 vertexBuffer : buffer,
                 componentDatatype : ComponentDatatype.UNSIGNED_BYTE,
+                normalize : true,
                 componentsPerAttribute : 4,
                 offsetInBytes : numComponents * sizeInBytes,
-                strideInBytes : stide
+                strideInBytes : stride
             });
         }
         return attributes;
@@ -365,6 +374,7 @@ define([
         result.fromScaledENU = Matrix4.clone(encoding.fromScaledENU);
         result.matrix = Matrix4.clone(encoding.matrix);
         result.hasVertexNormals = encoding.hasVertexNormals;
+        result.hasVertexColors = encoding.hasVertexColors;
         return result;
     };
 

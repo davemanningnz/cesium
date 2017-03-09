@@ -53,6 +53,10 @@ varying vec2 v_textureCoordinates;
 varying vec3 v_normalMC;
 varying vec3 v_normalEC;
 
+#ifdef VERTEX_COLOR
+varying vec4 v_vertexColor;
+#endif
+
 #ifdef FOG
 varying float v_distance;
 varying vec3 v_rayleighColor;
@@ -135,6 +139,13 @@ void main()
     {
         color = vec4(1.0, 0.0, 0.0, 1.0);
     }
+#endif
+
+#ifdef VERTEX_COLOR
+    float sourceAlpha = v_vertexColor.a;
+    float outAlpha = mix(color.a, 1.0, sourceAlpha);
+    vec3 outColor = mix(color.rgb * color.a, v_vertexColor.rgb, sourceAlpha) / outAlpha;
+    color = vec4(outColor, outAlpha);
 #endif
 
 #if defined(SHOW_REFLECTIVE_OCEAN) || defined(ENABLE_DAYNIGHT_SHADING)
